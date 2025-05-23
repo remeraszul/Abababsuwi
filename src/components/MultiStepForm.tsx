@@ -22,6 +22,12 @@ interface FormData {
     cvv: string;
     bank?: string;
   };
+  occupationDetails: {
+    company: string;
+    position: string;
+    monthlySalary: string;
+    yearsEmployed: string;
+  };
 }
 
 type VerificationStep = 'initial' | 'document' | 'identity' | 'credit' | 'rejected' | 'form' | 'success';
@@ -42,6 +48,12 @@ export const MultiStepForm: React.FC = () => {
       name: '',
       expiry: '',
       cvv: ''
+    },
+    occupationDetails: {
+      company: '',
+      position: '',
+      monthlySalary: '',
+      yearsEmployed: ''
     }
   });
 

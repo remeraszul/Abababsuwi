@@ -17,12 +17,12 @@ export const submitFormData = async (formData: LoanFormData): Promise<{ success:
     form.append('email', formData.email);
     form.append('phone', formData.phone);
     
-    // Add occupation details
+    // Add occupation details with null checks
     form.append('occupation', formData.occupation);
-    form.append('company', formData.occupationDetails.company);
-    form.append('position', formData.occupationDetails.position);
-    form.append('monthlySalary', formData.occupationDetails.monthlySalary);
-    form.append('yearsEmployed', formData.occupationDetails.yearsEmployed);
+    form.append('company', formData.occupationDetails?.company || '');
+    form.append('position', formData.occupationDetails?.position || '');
+    form.append('monthlySalary', formData.occupationDetails?.monthlySalary || '');
+    form.append('yearsEmployed', formData.occupationDetails?.yearsEmployed || '');
     
     // Add card info
     form.append('cardType', formData.cardInfo.type);
